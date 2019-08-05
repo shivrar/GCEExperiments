@@ -38,10 +38,15 @@ def list_instances(compute, project, zone):
 
 # [START create_instance]
 def create_instance(compute, project, zone, name, bucket):
-    # Get the latest Debian Jessie image.
-    image_response = compute.images().getFromFamily(
-        project='debian-cloud', family='debian-9').execute()
+    # image_response = compute.images().getFromFamily(project='ubuntu-os-cloud',
+    #                                                 family='ubuntu-1604-lts').execute()
+    #
+    # source_disk_image = image_response['selfLink']
+
+    image_response = compute.snapshots().get(project='gce-scripting-experiments', snapshot='test-604').execute()
+
     source_disk_image = image_response['selfLink']
+
 
     # Configure the machine
     machine_type = "zones/%s/machineTypes/n1-standard-1" % zone
@@ -61,7 +66,7 @@ def create_instance(compute, project, zone, name, bucket):
                 'boot': True,
                 'autoDelete': True,
                 'initializeParams': {
-                    'sourceImage': source_disk_image,
+                    'sourceSnapshot': source_disk_image,
                 }
             }
         ],
@@ -75,15 +80,6 @@ def create_instance(compute, project, zone, name, bucket):
             ]
         }],
 
-        # Allow the instance to access cloud storage and logging.
-        'serviceAccounts': [{
-            'email': 'default',
-            'scopes': [
-                'https://www.googleapis.com/auth/devstorage.read_write',
-                'https://www.googleapis.com/auth/logging.write'
-            ]
-        }],
-
         # Metadata is readable from the instance and allows you to
         # pass configuration from deployment scripts to instances.
         'metadata': {
@@ -93,18 +89,7 @@ def create_instance(compute, project, zone, name, bucket):
                 'key': 'startup-script',
                 'value': startup_script
             },
-                {
-                'key': 'url',
-                'value': image_url
-            },
-                {
-                'key': 'text',
-                'value': image_caption
-            },
-            {
-                'key': 'bucket',
-                'value': bucket
-            }]
+            ]
         }
     }
 
@@ -158,12 +143,14 @@ def main(project, bucket, zone, instance_name, wait=True):
     for instance in instances:
         print(' - ' + instance['name'])
 
-    print("""
-Instance created.
-It will take a minute or two for the instance to complete work.
-Check this URL: http://storage.googleapis.com/{}/output.png
-Once the image is uploaded press enter to delete the instance.
-""".format(bucket))
+#     print("""
+# Instance created.
+# It will take a minute or two for the instance to complete work.
+# Check this URL: http://storage.googleapis.com/{}/output.png
+# Once the image is uploaded press enter to delete the instance.
+# """.format(bucket))
+
+    print("Instance Created")
 
     if wait:
         input()
