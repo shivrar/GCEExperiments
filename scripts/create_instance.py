@@ -1,32 +1,25 @@
 #!/usr/bin/env python3
 
-# Copyright 2015 Google Inc. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""Example of using the Compute Engine API to create and delete instances.
-Creates a new compute engine instance and uses it to apply a caption to
-an image.
+"""
+Edited version of the code from the Compute Engine API python tutorials at:
     https://cloud.google.com/compute/docs/tutorials/python-guide
-For more information, see the README.md under /compute.
+
+This example script shows how to create and delete an instance pragmatically.
+
 """
 
 import argparse
 import os
 import time
+from enum import Enum
 
 import googleapiclient.discovery
 from six.moves import input
+
+
+class MODES(Enum):
+    NEW = 'new'
+    SNAPSHOT = 'snapshot'
 
 
 # [START list_instances]
@@ -37,24 +30,22 @@ def list_instances(compute, project, zone):
 
 
 # [START create_instance]
-def create_instance(compute, project, zone, name, bucket):
-    # image_response = compute.images().getFromFamily(project='ubuntu-os-cloud',
-    #                                                 family='ubuntu-1604-lts').execute()
-    #
-    # source_disk_image = image_response['selfLink']
+def create_instance_from_snapshot(compute, project, zone, name, startup_script='hello_world.sh', snapshot='test-604',
+                                  snapshot_project='gce-scripting-experiments'):
 
-    image_response = compute.snapshots().get(project='gce-scripting-experiments', snapshot='test-604').execute()
+    if snapshot_project is None or snapshot_project is None:
+        raise ValueError('snapshot_project and snapshot_name required')
+
+    image_response = compute.snapshots().get(project=snapshot_project, snapshot=snapshot).execute()
 
     source_disk_image = image_response['selfLink']
 
-
     # Configure the machine
     machine_type = "zones/%s/machineTypes/n1-standard-1" % zone
-    startup_script = open(
+    # Hardcoding startup script locations
+    startup_script_file = open(
         os.path.join(
-            os.path.dirname(__file__), 'startup_scripts/hello_world.sh'), 'r').read()
-    image_url = "http://storage.googleapis.com/gce-demo-input/photo.jpg"
-    image_caption = "Ready for dessert?"
+            os.path.dirname(__file__), 'startup_scripts/{}'.format(startup_script)), 'r').read()
 
     config = {
         'name': name,
@@ -87,7 +78,7 @@ def create_instance(compute, project, zone, name, bucket):
                 # Startup script is automatically executed by the
                 # instance upon startup.
                 'key': 'startup-script',
-                'value': startup_script
+                'value': startup_script_file
             },
             ]
         }
@@ -129,26 +120,23 @@ def wait_for_operation(compute, project, zone, operation):
 
 
 # [START run]
-def main(project, bucket, zone, instance_name, wait=True):
+def main(project, zone, instance_name, mode, snapshot_name, snapshot_project, wait=True):
     compute = googleapiclient.discovery.build('compute', 'v1')
 
-    print('Creating instance.')
+    if mode == MODES.NEW.value:
+        return
 
-    operation = create_instance(compute, project, zone, instance_name, bucket)
-    wait_for_operation(compute, project, zone, operation['name'])
+    if mode == MODES.SNAPSHOT.value:
+        print('Creating instance.')
+        operation = create_instance_from_snapshot(compute, project, zone, instance_name,
+                                                  snapshot_project=snapshot_project, snapshot=snapshot_name)
+        wait_for_operation(compute, project, zone, operation['name'])
 
     instances = list_instances(compute, project, zone)
 
     print('Instances in project %s and zone %s:' % (project, zone))
     for instance in instances:
         print(' - ' + instance['name'])
-
-#     print("""
-# Instance created.
-# It will take a minute or two for the instance to complete work.
-# Check this URL: http://storage.googleapis.com/{}/output.png
-# Once the image is uploaded press enter to delete the instance.
-# """.format(bucket))
 
     print("Instance Created")
 
@@ -167,14 +155,21 @@ if __name__ == '__main__':
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('project_id', help='Your Google Cloud project ID.')
     parser.add_argument(
-        'bucket_name', help='Your Google Cloud Storage bucket name.')
-    parser.add_argument(
         '--zone',
         default='us-central1-f',
         help='Compute Engine zone to deploy to.')
     parser.add_argument(
         '--name', default='demo-instance', help='New instance name.')
+    parser.add_argument('mode', help='Create instance from, a snapshot or from a clean image',
+                        choices=[mode.value for mode in MODES])
+    parser.add_argument('--snapshot_name', help='Name of the disk snapshot to create the instance from',
+                        default='test-604', required=False)
+    parser.add_argument('--snapshot_project', help='Google Cloud project ID the snapshot belongs to',
+                        default='gce-scripting-experiments', required=False)
 
     args = parser.parse_args()
 
-    main(args.project_id, args.bucket_name, args.zone, args.name)
+    print(args)
+
+    main(project=args.project_id, zone=args.zone, instance_name=args.name, mode=args.mode,
+         snapshot_name=args.snapshot_name, snapshot_project=args.snapshot_project)
